@@ -1,0 +1,144 @@
+##HTML FILE WITH THE CODES AND OUTPUT
+
+Machine Learning Project
+Deepak
+
+Saturday, November 21, 2015
+
+In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+##loading packages
+
+library(caret)
+## Loading required package: lattice
+## Loading required package: ggplot2
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+## Rattle: A free graphical interface for data mining with R.
+## Version 4.0.0 Copyright (c) 2006-2015 Togaware Pty Ltd.
+## Type 'rattle()' to shake, rattle, and roll your data.
+##Loading training and testing data set
+training <- read.csv("C:/Users/577037/Documents/Machine Learning/pml-training.csv",na.strings=c("NA","","#DIV/0!"))
+testing <- read.csv("C:/Users/577037/Documents/Machine Learning/pml-testing.csv",na.strings=c("NA","","#DIV/0!"))
+dim(training)
+## [1] 19622   160
+dim(testing)
+## [1]  20 160
+##Cleaning and Filtering of Data
+##The purpose is discarding of irrelevant, NA´s or with NULL variance variables. 
+##We will join training and testing data to clean and then separate them after cleaning
+
+
+training2<-subset(training,select=-c(classe))
+num.row<-nrow(training2)
+testing2<-subset(testing,select=-c(problem_id))
+data.join<-rbind(training2,testing2)
+
+data.join <- data.join[ , colSums(is.na(data.join)) == 0]
+nonzeroVar= nearZeroVar(data.join[sapply(data.join, is.numeric)], saveMetrics = TRUE)
+data.join= data.join[,nonzeroVar[, 'nzv']==0]
+remove = c('X', 'user_name', 'raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp', 'new_window', 'num_window')
+data.join <- data.join[, -which(names(data.join) %in% remove)]
+
+dim(data.join)
+## [1] 19642    52
+##Perofmring Correlation and PCA analysis for training and testing data
+
+## Training Data
+corrMatrix <- abs(cor(na.omit(data.join[sapply(data.join, is.numeric)]))) ## Correlation matrix
+correlated<-which(corrMatrix>0.9, arr.ind=TRUE)  ## data correlated is chosen
+
+## PCA variables is generated
+correlated.var<-data.join[, c(correlated)]
+correlated.var<-correlated.var[sapply(correlated.var, is.numeric)]
+preproc <- preProcess(correlated.var, method="pca")
+train.pca<-predict(preproc, correlated.var) ## PCA variables are created
+
+## correlated variables is deleted because they aren´t needed anymore. Instead of them, PCA variables will be used
+data.join2<-data.join[,-c(correlated)] ##variables correlated are deleted
+data.join2<-cbind(data.join2,train.pca) ## PCA variables are used instead of correlated one´s
+dim(data.join2)
+## [1] 19642    23
+##separate the training and testing data
+
+training2<-data.join2[1:num.row,]
+testing<- data.join2[(num.row+1):nrow(data.join2),]
+classe<-training$classe
+training2<-cbind(training2,classe)
+dim(training2)
+## [1] 19622    24
+inTrain <- createDataPartition(y=training2$classe, p=0.6, list=FALSE)
+training3 <- training2[inTrain,]
+testing2 <- training2[-inTrain,]
+
+
+##Analyse data using RandomForest
+library(randomForest)
+## randomForest 4.6-12
+## Type rfNews() to see new features/changes/bug fixes.
+library(e1071)
+training3 <- training3[ , sapply(training2, nlevels) <=53]
+modfit<-randomForest(classe ~., data=training3)
+modfit
+## 
+## Call:
+##  randomForest(formula = classe ~ ., data = training3) 
+##                Type of random forest: classification
+##                      Number of trees: 500
+## No. of variables tried at each split: 4
+## 
+##         OOB estimate of  error rate: 3.1%
+## Confusion matrix:
+##      A    B    C    D    E class.error
+## A 3315   10   14    8    1 0.009856631
+## B   54 2174   43    4    4 0.046072839
+## C    2   33 1989   25    5 0.031645570
+## D    8    3   97 1813    9 0.060621762
+## E    3    9   18   15 2120 0.020785219
+##Check accuracy using comfusion matrix
+set.seed(12345)
+rf.pred=predict(modfit,testing2,type="class")
+predMatrix = with(testing2,table(rf.pred,classe))
+confusionMatrix(rf.pred, testing2$classe)
+## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 2209   26    0    1    2
+##          B    7 1461   22    6    6
+##          C   11   30 1335   55    6
+##          D    4    0    9 1220   10
+##          E    1    1    2    4 1418
+## 
+## Overall Statistics
+##                                           
+##                Accuracy : 0.9741          
+##                  95% CI : (0.9704, 0.9775)
+##     No Information Rate : 0.2845          
+##     P-Value [Acc > NIR] : < 2.2e-16       
+##                                           
+##                   Kappa : 0.9673          
+##  Mcnemar's Test P-Value : 1.45e-11        
+## 
+## Statistics by Class:
+## 
+##                      Class: A Class: B Class: C Class: D Class: E
+## Sensitivity            0.9897   0.9625   0.9759   0.9487   0.9834
+## Specificity            0.9948   0.9935   0.9843   0.9965   0.9988
+## Pos Pred Value         0.9870   0.9727   0.9290   0.9815   0.9944
+## Neg Pred Value         0.9959   0.9910   0.9949   0.9900   0.9963
+## Prevalence             0.2845   0.1935   0.1744   0.1639   0.1838
+## Detection Rate         0.2815   0.1862   0.1702   0.1555   0.1807
+## Detection Prevalence   0.2852   0.1914   0.1832   0.1584   0.1817
+## Balanced Accuracy      0.9923   0.9780   0.9801   0.9726   0.9911
+##write up file for automatic grading as per question guidelines
+
+##source("~/pml_write_files.R")
+
+n = length(rf.pred)
+for(i in 1:n){
+  filename = paste0("problem_id_",i,".txt")
+  write.table(rf.pred[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+}
