@@ -1,0 +1,102 @@
+##R Markdown
+---
+title: "Machine Learning Project"
+author: "Deepak"
+date: "Saturday, November 21, 2015"
+output: html_document
+---
+
+In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+
+```{r}
+##loading packages
+
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+
+##Loading training and testing data set
+training <- read.csv("C:/Users/577037/Documents/Machine Learning/pml-training.csv",na.strings=c("NA","","#DIV/0!"))
+testing <- read.csv("C:/Users/577037/Documents/Machine Learning/pml-testing.csv",na.strings=c("NA","","#DIV/0!"))
+dim(training)
+dim(testing)
+
+##Cleaning and Filtering of Data
+##The purpose is discarding of irrelevant, NA´s or with NULL variance variables. 
+##We will join training and testing data to clean and then separate them after cleaning
+
+
+training2<-subset(training,select=-c(classe))
+num.row<-nrow(training2)
+testing2<-subset(testing,select=-c(problem_id))
+data.join<-rbind(training2,testing2)
+
+data.join <- data.join[ , colSums(is.na(data.join)) == 0]
+nonzeroVar= nearZeroVar(data.join[sapply(data.join, is.numeric)], saveMetrics = TRUE)
+data.join= data.join[,nonzeroVar[, 'nzv']==0]
+remove = c('X', 'user_name', 'raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp', 'new_window', 'num_window')
+data.join <- data.join[, -which(names(data.join) %in% remove)]
+
+dim(data.join)
+
+##Perofmring Correlation and PCA analysis for training and testing data
+
+## Training Data
+corrMatrix <- abs(cor(na.omit(data.join[sapply(data.join, is.numeric)]))) ## Correlation matrix
+correlated<-which(corrMatrix>0.9, arr.ind=TRUE)  ## data correlated is chosen
+
+## PCA variables is generated
+correlated.var<-data.join[, c(correlated)]
+correlated.var<-correlated.var[sapply(correlated.var, is.numeric)]
+preproc <- preProcess(correlated.var, method="pca")
+train.pca<-predict(preproc, correlated.var) ## PCA variables are created
+
+## correlated variables is deleted because they aren´t needed anymore. Instead of them, PCA variables will be used
+data.join2<-data.join[,-c(correlated)] ##variables correlated are deleted
+data.join2<-cbind(data.join2,train.pca) ## PCA variables are used instead of correlated one´s
+dim(data.join2)
+
+
+##separate the training and testing data
+
+training2<-data.join2[1:num.row,]
+testing<- data.join2[(num.row+1):nrow(data.join2),]
+classe<-training$classe
+training2<-cbind(training2,classe)
+dim(training2)
+
+inTrain <- createDataPartition(y=training2$classe, p=0.6, list=FALSE)
+training3 <- training2[inTrain,]
+testing2 <- training2[-inTrain,]
+
+
+##Analyse data using RandomForest
+library(randomForest)
+library(e1071)
+training3 <- training3[ , sapply(training2, nlevels) <=53]
+modfit<-randomForest(classe ~., data=training3)
+modfit
+
+
+##Check accuracy using comfusion matrix
+set.seed(12345)
+rf.pred=predict(modfit,testing2,type="class")
+predMatrix = with(testing2,table(rf.pred,classe))
+confusionMatrix(rf.pred, testing2$classe)
+
+
+##write up file for automatic grading as per question guidelines
+
+##source("~/pml_write_files.R")
+
+n = length(rf.pred)
+for(i in 1:n){
+  filename = paste0("problem_id_",i,".txt")
+  write.table(rf.pred[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+}
+
+
+```
